@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+BASHMARKS="${HOME}/.bashmarks"
+
+usage () {
+cat << EOF
+$0 [OPERATION] [PARAMETERS]
+Script to create, modificate, delete and view bookmarks in bash.
+Once created, they can be accessed via "cd @NAME_OF_BOOKMARK"
+At this day, the "alias cd='cd -P'" cannot be setted correctly from
+this script, so is adviced to create this alias to show a correct 
+format from commands like "pwd"
+
+OPERATIONS 
+  This script accept only ONE operation
+  -d BOOKMARK_NAME 
+    Deletes the bookmark BOOKMARK
+
+  -h Show this message
+
+  -l  List the bookmarks along their real path
+
+  -e OLD_BM_NAME NEW_BM_NAME
+    Changes the name of OLD_BM_NAME to NEW_BM_NAME
+  
+  -m BOOKMARK_NAME
+    Create a bookmark of the current directory
+
+  -n PATH BOOKMARK_NAME
+    Create a new bookmark
+
+FILES AND VARS
+  
+  ~/.bashmarks
+    The bookmarks are stored here, in the form of symlinks
+
+  CDPATH=$CDPATH:~/.bashmarks
+    If this variable is not setted, the script sets it in .bashrc
+EOF
+}
+
+init() {
+  CHG=0
+  [[ -z $(echo $CDPATH | grep -E "\.bashmark:?") ]] && echo "=== initializing CDPATH ===" && CHG=1 && echo -e '#BASHMARKS: exporting CDPATH\nexport CDPATH="$CDPATH:.:~/.bashmarks"' >> ~/.bashrc
+  #[[ -z $(grep -E "alias cd='cd -.*P.*'" $TMP_FILE ) ]] && echo "=== Configuring cd to 'cd -P' ===" && echo -e "#BASHMARKS: configuring cd to behave as 'cd -P'\nalias cd='cd -P'" >> ~/.bashrc   ###ITS NOT POSSIBLE TO RETRIVE AN USER ALIASES INSIDE A SCRIPT. THIS OPTION IS UNAVILABLE AT THIS POINT 
+  [[ ! -d $BASHMARKS  ]] && echo "=== creating directory $BASHMARKS ==="  && mkdir $BASHMARKS
+  [[ CHG -gt 0 ]] && source ~/.bashrc
+}
+
+list_bm() {
+  [[ $(find $BASHMARKS -type l | wc -l) -eq 0 ]] && echo "=== No bookmark setted ===" || find $BASHMARKS -type l -printf '%P --> ' -exec readlink -f "{}" \;
+}
+
+modify_bm() {
+  OLD=$1
+  NEW=$2
+  [[ ! -h ${BASHMARKS}/${OLD} ]] && echo "Error: the original bookmark doesn't exist or isn't a valid bookmark" && exit 3
+  [[ ! $NEW =~ ^@.+ ]] && NEW="@"$NEW
+  mv ${BASHMARKS}/${OLD} ${BASHMARKS}/${NEW}
+}
+
+delete_bm() {
+  TARGET=$1
+  [[ ! $TARGET =~ ^@.+ ]] && TARGET="@"$TARGET
+  [[ ! -h ${BASHMARKS}/${TARGET} ]] && echo "Error: the targeted bookmark doesn't exist or isn't a valid bookmark" && exit 3 || unlink ${BASHMARKS}/${TARGET}
+}
+
+create_bm() {
+  TARGET=$1
+  NAME=$2
+  [[ ! -d $TARGET ]] && echo "Error: the targeted directory doesn't exist" && exit 4
+  [[ ! $NAME =~ ^@.+ ]] && NAME="@"$NAME
+  [[ -h ${BASHMARKS}/${NAME} ]] && echo "Error: $NAME already exists" && exit 4
+  ln -s $(realpath $TARGET) ${BASHMARKS}/${NAME}
+}
+
+[[ $# -eq 0 ]] && usage && exit 0
+N_OPS=0
+while getopts d:ehlm:n OP
+do
+  case $OP in
+    d)
+      DELETE=$OPTARG
+      N_OPS=$((N_OPS + 1))
+      ;;
+    e)
+      MODIFY=1
+      N_OPS=$((N_OPS + 1))
+      ;;
+    h)
+      usage
+      exit 0
+      ;;
+    l)
+      LIST=1
+      N_OPS=$((N_OPS + 1))
+      ;;
+    n)
+      CREATE=1
+      N_OPS=$((N_OPS + 1))
+      ;;
+    m)
+      MARK=$OPTARG
+      N_OPS=$((N_OPS + 1))
+      ;;
+    ?)
+      usage
+      exit 1
+      ;;
+  esac
+done
+
+[[ $N_OPS -ne 1 ]] && echo "Error: Only one operation can be executed" && usage && exit 2
+
+shift $(($OPTIND - 1))
+init
+[[ $LIST -eq 1 ]] && list_bm 
+[[ $MODIFY -eq 1 ]] && modify_bm $1 $2
+[[ ! -z $DELETE ]] && delete_bm $DELETE
+[[ $CREATE -eq 1 ]] && create_bm $1 $2
+[[ ! -z $MARK ]] && create_bm . $MARK
