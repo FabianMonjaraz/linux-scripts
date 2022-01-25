@@ -1,6 +1,7 @@
 <H2>BM</h2>
-
+<p>
 bm [OPERATION] [PARAMETERS]
+
 Script to create, modificate, delete and view bookmarks in bash.
 Once created, they can be accessed via "cd @NAME_OF_BOOKMARK"
 At this day, the "alias cd='cd -P'" cannot be setted correctly from
@@ -32,3 +33,4 @@ FILES AND VARS
 
   CDPATH=$CDPATH:~/.bashmarks
     If this variable is not setted, the script sets it in .bashrc
+    </p>
