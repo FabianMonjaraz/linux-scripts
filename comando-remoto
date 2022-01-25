@@ -1,0 +1,199 @@
+#!/bin/bash
+### Script para envio de comandos y archivos a una lista de ipS
+### funciona como un ansible lite.
+### Se recomienda utilizar ansible en lugar de este script,
+### ya que ansible evidentemente es mas completo y tiene mas soporte,
+### pero para cuestiones sencillas y/o que requieran acciones mas inmediatas
+### este script puede funcionar, ya que se basa en el funcionamiento
+### basico de ssh. 
+
+############################## IMPORTANTE ###########################################
+# Para el funcionamiento de este script, es necesario tener instalado nmap. 
+# Si este paquete no esta instalado, no sera posible verificar el estado de la 
+# conexion con cualquier servidor remoto.
+
+
+
+
+
+####################################################################################
+# Funcion para describir el uso de este comando.
+# Requiere completarse
+## UTILIZACION
+# usage
+###############
+usage() {
+  echo "./$0 [OPTS] [COMMAND]" 
+}
+###############
+####################################################################################
+
+####################################################################################
+# Funcion para imprimir mensajes de error al llamar las funciones
+# no deberia de mostrarse en el estado actual del script, ya que originalmente
+# se creo para el desarrollo y troubleshoting de este script,
+# pero por su utilidad se decidio mantener aqui
+## UTILIZACION
+# error_message "MENSAJE DE ERROR"
+###############
+error_message() {
+  echo "\\\\\\ Error: $1 ///"
+  usage
+  exit 1
+}
+###############
+####################################################################################
+
+####################################################################################
+# Funcion para enviar un archivo al servidor remoto, especificamente a 
+# la carpeta /tmp. Esta es simplemente una encapsulacion del comando "scp".
+# Esta funcion esta diseñada para fallar en caso de que no exista relacion
+# de confianza y aceptar todos los hosts no conocidos.
+## UTILIZACION
+# send_file IP RUTA_DEL_ARCHIVO
+## Nota: la verificacion de la existencia del archivo a enviar
+# ser realiza al verificar las opciones recibidas (en la parte de opts)
+###############
+send_file() {
+  ## Funcionamiento:
+  # Para verificar la conexion con el servidor remoto, se utiliza el comando nmap,
+  # el cual muestra el estado de la conexion, el cual puede ser "open", "closed",
+  # o "filtered". En el primer caso se envia el archivo. En caso contrario
+  # se muestra un mensaje de error
+  IP=$1
+  FILE=$2
+ 
+  # Aqui es donde se manda a llamar nmap y se buscan las palabras clave.
+  CONEXION=$(nmap $IP -PN -p ssh | egrep -io 'open|closed|filtered')
+
+  if [[ $CONEXION == open ]];
+  then
+	## Opciones llamadas en el comando scp:
+	# -o: Usado para pasar opciones en el formato usado en ssh_config
+	# StrictHostKeyChecking=no: Acepta todas los hosts no conocidos
+	# BatchMode=yes: Descarta las conexiones que no tengan conexion de confianza
+	scp -o StrictHostKeyChecking=no -o BatchMode=yes $FILE ${IP}:/tmp 
+  else
+	echo "Error: no hay servicio ssh con $IP. Posiblemente este desconectado o si ssh esta instalado se encuerntre en otro puerto" 
+  fi
+}
+###############
+####################################################################################
+
+####################################################################################
+# Funcion para enviar un comando al servidor remoto, 
+# Esta es simplemente una encapsulacion del comando "ssh".
+# Esta funcion esta diseñada para fallar en caso de que no exista relacion
+# de confianza y aceptar todos los hosts no conocidos.
+## UTILIZACION
+# send_command IP COMANDO
+###############
+send_command() {
+  ## Funcionamiento:
+  # A diferencia de la funcion comando send_file, esta funcion, ademas de validar
+  # el estado de la conexion con nmap, se valida que exista una relacion de 
+  # confianza con el servidor remoto
+  IP=$1
+  CMD=$2
+
+  # Prueba del estado de la conexion. Si esta esta abierta, entonces se procede a
+  # probar si existe una relacion de confianza
+  CONEXION=$(nmap $IP -PN -p ssh | egrep -io 'open|closed|filtered')
+  if [[ $CONEXION == open ]];
+  then
+
+    # Prueba de conexion para verificar si el host al que se intenta acceder 
+    # tiene relacion de confianza. Si existe esta relacion, entonces se envia el
+    # comando. En caso contrario se envia un mensaje de error
+    
+    ## Opciones llamadas en el comando ssh: 
+    # -oStrictHostKeyChecking=no: Acepta todas los hosts no conocidos
+    # -oBatchMode=yes: Descarta las conexiones que no tengan conexion de confianza
+    ssh -o StrictHostKeyChecking=no -o BatchMode=yes $IP "echo" > /dev/null 
+    if [[ $? == 0 ]]; then
+      ssh -o StrictHostKeyChecking=no -o BatchMode=yes $IP "($CMD)2>&1" 
+    else
+      echo "Error: Sin relacion de confianza"
+    fi
+  else
+    echo "Error: No hay conexion con esta IP" 
+  fi
+}
+###############
+####################################################################################
+
+####################################################################################
+# Esta funcion es una combinacion entre send_file y send_command. Esta funcion envia
+# un script a la carpeta /tmp del servidor remoto y lo ejecuta a traves de
+# send_command
+## UTILIZACION
+# send_script IP RUTA_DEL_SCRIPT
+###############
+send_script() {
+  IP=$1
+  PATH_FILE=$2
+  FILE=$(basename ${PATH_FILE})
+
+  CONEXION=$(nmap $IP -PN -p ssh | egrep -io 'open|closed|filtered')
+  if [[ $CONEXION == open ]];
+  then
+    ssh -o StrictHostKeyChecking=no -o BatchMode=yes $IP "echo" > /dev/null 
+    if [[ $? == 0 ]]; then
+      (scp -o StrictHostKeyChecking=no -o BatchMode=yes $PATH_FILE ${IP}:/tmp 2>&1) >/dev/null
+      ssh -oStrictHostKeyChecking=no -oBatchMode=yes $IP "bash /tmp/$(echo $FILE | awk -F "/" '{print $NF}')"
+    else
+      echo "Error: Sin relacion de confianza"
+    fi
+  else
+    echo "Error: No hay conexion con esta IP" 
+  fi
+}
+###############
+####################################################################################
+
+####################################################################################
+###############
+while getopts ":i:f:s:" option;
+do
+  case ${option} in
+  i ) 
+    INVENTORY="${OPTARG}"
+    [[ ! -f ${INVENTORY} ]] && error_message "El inventario \"${INVENTORY}\" no existe" && exit 1
+  ;;
+  f ) 
+    SCRIPT="${OPTARG}"
+    [[ ! -f ${SCRIPT} ]] && error_message "El archivo de comandos \"${SCRIPT}\" no existe" && exit 1
+  ;;
+  s ) 
+    SEND="${OPTARG}"
+    [[ ! -f ${SEND} ]] && error_message "El archivo a enviar \"${SEND}\" no existe" && exit 1
+  ;;
+  : ) 
+    error_message "\"${option}\" requiere un argumento" && exit 1
+  ;;
+  \? )
+    error_message "\"${\?}\" no es una opcion valida"
+    exit 1
+  ;;
+  esac
+done
+shift $((OPTIND -1)) #Borra los parametros leidos anteriormente
+SINGLE_COMMAND=$1
+[[ -n $SINGLE_COMMAND ]] && [[ -n $SCRIPT ]] && error_message "Conflicto de argumentos. Solo puede haber un comando o un archivo con comandos, no ambos"
+
+echo SINGLE_COMMAND: ${SINGLE_COMMAND}
+echo INVENTORY: ${INVENTORY}
+echo SCRIPT: ${SCRIPT}
+echo SEND: ${SEND}
+for IP in $(cat ${INVENTORY}); do
+  [[ -n $(echo "$IP" | grep "#") ]] && continue
+  echo  "-------------${IP}-------------"
+  [[ -n $SEND ]] && send_file ${IP} $SEND 
+  [[ -n $SINGLE_COMMAND ]] && send_command ${IP} "$SINGLE_COMMAND"
+  [[ -n $SCRIPT ]] && send_script ${IP} $SCRIPT
+  echo  "------------------------------"
+done
+###############
+####################################################################################
+
+#IDEA: si no se agrega comando, enviar un echo, solo para verificar si existe conexion

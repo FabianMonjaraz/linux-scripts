@@ -1,0 +1,93 @@
+#!/bin/bash
+#set -x
+
+#IMPROV: agregar opcion para enviar un archivo
+#IMPROV: si no se agrega comando, enviar un echo, solo para verificar si existe conexion
+usage() {
+  echo "./$0 [OPTS] [COMMAND]" 
+}
+error_message() {
+  echo -e "\\\\\\\tError: $1///"
+  usage
+  exit 1
+}
+send_command() {
+  IP=$1
+  CMD=$2
+  CONEXION=$(nmap $IP -PN -p ssh | egrep -io 'open|closed|filtered')
+  if [[ $CONEXION == open ]];
+  then
+    ssh -oStrictHostKeyChecking=no -oBatchMode=yes $IP "echo" > /dev/null #Prueba de conexion para verificar si el host al que se intenta acceder tiene relacion de confianza
+    if [[ $? == 0 ]]; then
+      echo "${IP}, $(ssh -oStrictHostKeyChecking=no -oBatchMode=yes $IP "($CMD)2>&1")" #StrictHostKeyChecking=no Acepta todos los hosts no conocidos. BachMode=yes descarta las conexiones que no tengan relacion de confianza
+    else
+      echo "$IP, Error: Sin relacion de confianza"
+    fi
+  else
+    echo "$IP, Error: No hay conexion con esta IP" 
+  fi
+}
+send_file() {
+  IP=$1
+  FILE=$2
+  CONEXION=$(nmap $IP -PN -p ssh | egrep -io 'open|closed|filtered')
+  if [[ $CONEXION == open ]];
+  then
+        scp -o StrictHostKeyChecking=no -o BatchMode=yes $FILE ${IP}:/tmp #StrictHostKeyChecking=no acepta todos los hosts no conocidos. BachMode=yes descarta las conexiones que no tengan relacion de confianza
+  else
+        echo "Error: no hay conexion con $IP"
+  fi
+}
+
+send_script() {
+  IP=$1
+  FILE=$2
+  CONEXION=$(nmap $IP -PN -p ssh | egrep -io 'open|closed|filtered')
+  if [[ $CONEXION == open ]];
+  then
+    ssh -oStrictHostKeyChecking=no -oBatchMode=yes $IP "echo" > /dev/null #Prueba de conexion para verificar si el host al que se intenta acceder tiene relacion de confianza
+    if [[ $? == 0 ]]; then
+      (scp -o StrictHostKeyChecking=no -o BatchMode=yes $FILE ${IP}:/tmp 2>&1) >/dev/null
+      echo $IP, $(ssh -oStrictHostKeyChecking=no -oBatchMode=yes $IP "bash /tmp/$(echo $FILE | awk -F "/" '{print $NF}')")
+    else
+      echo "$IP, Error: Sin relacion de confianza"
+    fi
+  else
+    echo "$IP, Error: No hay conexion con esta IP" 
+  fi
+}
+
+while getopts "i:s:f:" option;
+do
+  case ${option} in
+  i ) 
+    INVENTORY="${OPTARG}"
+    [[ ! -f ${INVENTORY} ]] && error_message "El inventario \"${INVENTORY}\" no existe" && exit 1
+  ;;
+  s ) 
+    SEND="${OPTARG}"
+    [[ ! -f ${SEND} ]] && error_message "El archivo a enviar \"${SEND}\" no existe" && exit 1
+  ;;
+  f ) 
+    SCRIPT="${OPTARG}"
+    [[ ! -f ${SCRIPT} ]] && error_message "El script a enviar \"${SEND}\" no existe" && exit 1
+  ;;
+  : ) 
+    error_message "\"${option}\" requiere un argumento" && exit 1
+  ;;
+  \? )
+    error_message "\"${\?}\" no es una opcion valida"
+    exit 1
+  ;;
+  esac
+done
+shift $((OPTIND -1)) #Borra los parametros leidos anteriormente
+SINGLE_COMMAND=$1
+[[ -n $SINGLE_COMMAND ]] && [[ -n $SCRIPT ]] && error_message "Conflicto de argumentos. Solo puede haber un comando o un archivo con comandos, no ambos"
+echo -e "Comando usado: ${SINGLE_COMMAND} \nScript enviado: ${SCRIPT}"
+for IP in $(cat ${INVENTORY}); do
+  [[ -n $(echo $IP | grep "#") ]] && continue
+  [[ -n $SEND ]] && send_file $IP $SEND
+  [[ -n $SINGLE_COMMAND ]] && send_command ${IP} "$SINGLE_COMMAND"
+  [[ -n $SCRIPT ]] && send_script ${IP} "$SCRIPT"
+done

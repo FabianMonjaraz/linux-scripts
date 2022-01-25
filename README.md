@@ -1,4 +1,4 @@
-<H2>BM</h2>
+<h2>bm</h2>
 <p>
 bm [OPERATION] [PARAMETERS]
 
