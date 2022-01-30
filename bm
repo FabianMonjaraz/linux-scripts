@@ -53,6 +53,7 @@ list_bm() {
 modify_bm() {
   OLD=$1
   NEW=$2
+  [[ ! $OLD =~ ^@.+ ]] && OLD="@"$OLD
   [[ ! -h ${BASHMARKS}/${OLD} ]] && echo "Error: the original bookmark doesn't exist or isn't a valid bookmark" && exit 3
   [[ ! $NEW =~ ^@.+ ]] && NEW="@"$NEW
   mv ${BASHMARKS}/${OLD} ${BASHMARKS}/${NEW}
