@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 BASHMARKS="${HOME}/.bashmarks"
-
 usage () {
 cat << EOF
 $0 [OPERATION] [PARAMETERS]
@@ -22,8 +21,11 @@ OPERATIONS
   -e OLD_BM_NAME NEW_BM_NAME
     Changes the name of OLD_BM_NAME to NEW_BM_NAME
   
-  -m BOOKMARK_NAME
+  -t BOOKMARK_NAME
     Create a bookmark of the current directory
+
+  -r BM_NAME NEW_PATH_TO_THE_BM
+    Redirect the path of an already created bookmark
 
   -n PATH BOOKMARK_NAME
     Create a new bookmark
@@ -50,11 +52,11 @@ list_bm() {
   [[ $(find $BASHMARKS -type l | wc -l) -eq 0 ]] && echo "=== No bookmark setted ===" || find $BASHMARKS -type l -printf '%P --> ' -exec readlink -f "{}" \;
 }
 
-modify_bm() {
+edit_bm() {
   OLD=$1
   NEW=$2
   [[ ! $OLD =~ ^@.+ ]] && OLD="@"$OLD
-  [[ ! -h ${BASHMARKS}/${OLD} ]] && echo "Error: the original bookmark doesn't exist or isn't a valid bookmark" && exit 3
+  [[ ! -L ${BASHMARKS}/${OLD} ]] && echo "Error: the original bookmark doesn't exist or isn't a valid bookmark" && exit 3
   [[ ! $NEW =~ ^@.+ ]] && NEW="@"$NEW
   mv ${BASHMARKS}/${OLD} ${BASHMARKS}/${NEW}
 }
@@ -62,7 +64,7 @@ modify_bm() {
 delete_bm() {
   TARGET=$1
   [[ ! $TARGET =~ ^@.+ ]] && TARGET="@"$TARGET
-  [[ ! -h ${BASHMARKS}/${TARGET} ]] && echo "Error: the targeted bookmark doesn't exist or isn't a valid bookmark" && exit 3 || unlink ${BASHMARKS}/${TARGET}
+  [[ ! -L ${BASHMARKS}/${TARGET} ]] && echo "Error: the targeted bookmark doesn't exist or isn't a valid bookmark" && exit 3 || unlink ${BASHMARKS}/${TARGET}
 }
 
 create_bm() {
@@ -70,38 +72,59 @@ create_bm() {
   NAME=$2
   [[ ! -d $TARGET ]] && echo "Error: the targeted directory doesn't exist" && exit 4
   [[ ! $NAME =~ ^@.+ ]] && NAME="@"$NAME
-  [[ -h ${BASHMARKS}/${NAME} ]] && echo "Error: $NAME already exists" && exit 4
+  [[ -L ${BASHMARKS}/${NAME} ]] && [[ $RECREATE -eq 0 ]] && echo "Error: $NAME already exists" && exit 4
   ln -s $(realpath $TARGET) ${BASHMARKS}/${NAME}
 }
 
+redirect_bm() {
+  TARGET=$1
+  NAME=$2
+  [[ ! $NAME =~ ^@.+ ]] && NAME="@"$NAME
+  if [[ ! -L ${BASHMARKS}/${NAME} ]]; then
+    create_bm $TARGET $NAME
+  else
+    [[ ! -d $TARGET ]] && echo "Error: the targeted directory doesn't exist" && exit 4
+    unlink ${BASHMARKS}/${NAME}
+    ln -s $(realpath $TARGET) ${BASHMARKS}/${NAME}
+  fi
+  
+}
+
 [[ $# -eq 0 ]] && usage && exit 0
-N_OPS=0
-while getopts d:ehlm:n OP
+init
+while getopts d:ehlrt:n OP
 do
   case $OP in
     d)
-      DELETE=$OPTARG
-      N_OPS=$((N_OPS + 1))
+      delete_bm $OPTARG
+      exit 0
       ;;
     e)
-      MODIFY=1
-      N_OPS=$((N_OPS + 1))
+      shift $(($OPTIND - 1))
+      edit_bm $1 $2
+      exit 0
       ;;
     h)
       usage
       exit 0
       ;;
     l)
-      LIST=1
-      N_OPS=$((N_OPS + 1))
+      list_bm 
+      exit 0
+      ;;
+    r)
+      shift $(($OPTIND - 1))
+      redirect_bm $1 $2
+      exit 0
       ;;
     n)
-      CREATE=1
-      N_OPS=$((N_OPS + 1))
+      shift $(($OPTIND - 1))
+      create_bm $1 $2
+      exit 0
       ;;
-    m)
-      MARK=$OPTARG
-      N_OPS=$((N_OPS + 1))
+    t)
+      create_bm . $OPTARG
+      exit 0
       ;;
     ?)
       usage
@@ -110,12 +133,3 @@ do
   esac
 done
 
-[[ $N_OPS -ne 1 ]] && echo "Error: Only one operation can be executed" && usage && exit 2
-
-shift $(($OPTIND - 1))
-init
-[[ $LIST -eq 1 ]] && list_bm 
-[[ $MODIFY -eq 1 ]] && modify_bm $1 $2
-[[ ! -z $DELETE ]] && delete_bm $DELETE
-[[ $CREATE -eq 1 ]] && create_bm $1 $2
-[[ ! -z $MARK ]] && create_bm . $MARK
