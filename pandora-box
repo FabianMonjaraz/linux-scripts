@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+usage() {
+  cat << EOM
+$0 -c COMMAND [-f TARGET-FILE] [-u SFTP_USER] [-p PASS-FILE] [-s SERVER] [-hi]
+
+Script to manage a sftp server with the usual commands.
+
+ARGUMENTS:
+  -c COMMAND      Operation to execute in the sftp server.
+  -f TARGET-FILE  File to get/put  (Dependihg the operation. Recursive).
+  -h              Show this message.
+  -i
+  -p PASS-FILE    Change the default password file used to connect.
+  -r RUTE-IN-SFTP Change the original route in the sftp.
+  -u SFTP_USER    Change the default user used to connect (def. is "dave").
+  -s SERVER       Change the default sftp server (def. is "mimir").
+
+COMMANDS:
+  GET     Get the [TARGET] file (or directory) from the server.
+  PUT     Put the [TARGET] file (or directory) on the server.
+  LS      List the files inside the user folder
+EOM
+  exit 0
+}
+
+#[[ $# -ne 2 ]] && usage 
+SFTP_USER='dave'
+SERVER='mimir'
+PASS_FILE='${HOME}/.secrets/sftp-mimir.txt'
+INTERACTIVE=0
+
+while getopts 'hic:f:p:r:u:s:' PARAM; do
+  case $PARAM in
+    h)
+      usage
+      ;;
+    c)
+      COMMAND=${OPTARG}
+      ;;
+    f)
+      TARGET_FILE=${OPTARG}
+      ;;
+    i)
+      INTERACTIVE=1
+      ;;
+    p)
+      PASS_FILE=${OPTARG}
+      ;;
+    r)
+      ROUTE_IN_SFTP=${OPTARG}
+      ;;
+    u)
+      SFTP_USER=${OPTARG}
+      ;;
+    s)
+      SERVER=${OPTARG}
+      ;;
+  esac
+done
+
+if [[ -z $COMMAND ]] && [[ $INTERACTIVE -eq 0 ]]; then 
+  echo >&2 "Error: Command not defined. Maybe you need the '-i' argument." && exit 1
+  exit 1;
+fi
+if [[ ! -e $TARGET_FILE ]] && [[ $COMMAND == 'put' ]]; then 
+  echo >&2 "Error: The file to upload '$TARGET_FILE' doesn't exist"
+  exit 1
+fi
+eval [[ ! -f $PASS_FILE ]] && echo >&2 "Error: The password file '$PASS_FILE' doesn't exist" && exit 1
+
+if [[ $INTERACTIVE -eq 1 ]]; then
+  eval sshpass -f $PASS_FILE sftp ${SFTP_USER}@${SERVER}
+else
+  TMP_COMM=$(mktemp ./.XXXX)
+  case $COMMAND in
+    get)
+      [[ ! -z $ROUTE_IN_SFTP ]] && ROUTE_IN_SFTP="${ROUTE_IN_SFTP}/"
+      echo "get -R ${ROUTE_IN_SFTP}${TARGET_FILE}" > $TMP_COMM
+      ;;
+    put)
+      echo -e "cd $ROUTE_IN_SFTP\nput -R ${TARGET_FILE}" > $TMP_COMM
+      ;;
+    ls)
+      echo "ls -l ${ROUTE_IN_SFTP}" > $TMP_COMM
+      ;;
+    *)
+      echo >&2 "Error: The provided command is not supported."
+      exit 1
+      ;;
+  esac
+  eval sshpass -f $PASS_FILE sftp -oBatchMode=no -b $TMP_COMM ${SFTP_USER}@${SERVER}
+  rm $TMP_COMM
+fi
