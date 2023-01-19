@@ -75,10 +75,10 @@ else
   case $COMMAND in
     get)
       [[ ! -z $ROUTE_IN_SFTP ]] && ROUTE_IN_SFTP="${ROUTE_IN_SFTP}/"
-      echo "get -R ${ROUTE_IN_SFTP}${TARGET_FILE}" > $TMP_COMM
+      echo "get -pR ${ROUTE_IN_SFTP}${TARGET_FILE}" > $TMP_COMM
       ;;
     put)
-      echo -e "cd $ROUTE_IN_SFTP\nput -R ${TARGET_FILE}" > $TMP_COMM
+      echo -e "cd $ROUTE_IN_SFTP\nput -pR ${TARGET_FILE}" > $TMP_COMM
       ;;
     ls)
       echo "ls -l ${ROUTE_IN_SFTP}" > $TMP_COMM
