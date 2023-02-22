@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 time=$1
 [[ -z $time ]] && time="1m"
-sleep $time
+sleep $time 
 poweroff
