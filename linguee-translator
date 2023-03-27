@@ -29,5 +29,5 @@ curl -s \
 -X GET \
 https://linguee-api.fly.dev/api/v2/translations?${REQUEST} \
 -o $OUTPUT_FILE 
-jp -f $OUTPUT_FILE "[::-1].translations[].{Translate: {Text: text, Examples: examples[]}, Meta: pos}"
+jp -f $OUTPUT_FILE "[::-1].translations[].{Translate: {Text: text, Examples: examples[]}, Meta: pos}" | less
 rm $OUTPUT_FILE
