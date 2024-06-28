@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+TARGET_HOST=$1
+[[ -z $TARGET_HOST ]] && echo "!! Host to check wasn't provided" && exit 1
+while true; do
+  check_ping=$(ping -c 1 $TARGET_HOST >& /dev/null; echo $?)
+  check_ssh=1
+  if [[ $check_ping -eq 0 ]]; then
+    msg="=== $TARGET_HOST not ready ==="
+    check_ssh=$(nc -zv $TARGET_HOST 22 >/dev/null 2>$1; echo $?)
+    [[ $check_ssh -eq 0 ]] && msg="=== $TARGET_HOST ready to connect ===" 
+  else
+    msg="=== $TARGET_HOST unreachable ==="
+  fi
+  echo $msg && [[ $check_ssh -eq 0 ]] && break
+  sleep 1
+done
+
