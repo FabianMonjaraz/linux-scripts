@@ -3,7 +3,6 @@ TYPE=$1
 TIME=$2
 MSG=""
 
-
 case $TYPE in 
   w)
     MSG="Time to work!!! You can do it"
