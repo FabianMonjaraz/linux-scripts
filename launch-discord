@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -x
+updater_log=~/.config/discord/logs/legacyModulesUpdater.log
+control_file=~/.status_discord_updater
+discord_file_url="https://discord.com/api/download/stable?platform=linux&format=tar.gz"
+local_install_dir=~/local_opt/
+launcher_file=${local_install_dir}/Discord/Discord
+
+update_discord(){
+  [[ ! -d $local_install_dir  ]] && mkdir $local_install_dir
+  original_dir=$PWD
+  cd $local_install_dir
+  [[ -d ${local_install_dir}/Discord ]] && rm -rf ${local_install_dir}/Discord
+  wget -O discord.tar.gz "$discord_file_url"
+  tar xzf discord.tar.gz
+  rm discord.tar.gz
+  cd $original_dir
+}
+execute_binary(){
+  [[ ! -f $launcher_file ]] && update_discord
+  $launcher_file &
+}
+kill_discord(){
+  ps -fe | grep -i discord | grep -vE 'grep|vim|launch-' | awk '{print $2}' | xargs kill
+}
+launch_discord(){
+  rm -f $control_file
+  updated_message="Host is up to date"
+  outdated_message="Host update is available"
+  execute_binary
+  ((tail -f -n0 $updater_log &) | grep -m 1 -iE "$outdated_message|$updated_message" > $control_file) &
+  while [[ ! -f $control_file ]]; do
+    sleep 1
+  done
+  if [[ $(grep "$outdated_message" $control_file) ]]; then
+    kill_discord
+    update_discord
+    launch_discord
+  fi
+}
+
+launch_discord

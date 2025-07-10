@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+TYPE=$1
+TIME=$2
+MSG=""
+
+case $TYPE in 
+  w)
+    MSG="Time to work!!! You can do it"
+  ;;
+  r)
+    MSG="Time to rest!!! Good work"
+  ;;
+esac
+echo $MSG
+date +%H:%M && sleep ${TIME}m && notify-send -u critical -t 0 -a pomo "${MSG:?}"
