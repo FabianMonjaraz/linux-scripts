@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+SINKS=($(pactl list short sinks | awk '{print $1}' | tr '\n' ' '))
+CURRENT_SINK=$(pactl list short sinks | grep -i running | awk '{print $1}')
+export IFS=$'\n' # To change separators from spaces to jumplines
+CURRENT_SINK_POSITION=$(grep -m1 -Fxn ${CURRENT_SINK} <<<${SINKS[*]} | cut -d: -f1)
+NEXT_SINK_POSITION=$(((${CURRENT_SINK_POSITION} + 1) % ${#SINKS[*]}))
+NEXT_SINK=${SINKS[$NEXT_SINK_POSITION - 1]}
+# echo "SINKS -> ${SINKS[*]}"
+# echo "CURRENT_SINK -> $CURRENT_SINK"
+# echo "CURRENT_SINK_POSITION -> $CURRENT_SINK_POSITION"
+# echo "NEXT_SINK_POSITION -> $NEXT_SINK_POSITION"
+# echo "NEXT_SINK -> $NEXT_SINK"
+
+echo "pactl set-default-sink ${NEXT_SINK}"
+pactl set-default-sink ${NEXT_SINK}
